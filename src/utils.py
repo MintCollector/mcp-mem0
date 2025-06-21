@@ -96,9 +96,18 @@ def get_mem0_client():
     
     if vector_store_provider == 'qdrant':
         qdrant_host = os.getenv('QDRANT_HOST', 'localhost')
+        # Determine embedding dimensions based on the actual embedding model
+        embedding_model = os.getenv('EMBEDDING_MODEL_CHOICE', '')
+        if 'embedding-001' in embedding_model:  # Google Gemini embedding model
+            embedding_dims = 768
+        elif llm_provider == "openai":
+            embedding_dims = 1536
+        else:
+            embedding_dims = 768  # Default for other providers
+            
         qdrant_config = {
             "collection_name": os.getenv('QDRANT_COLLECTION', 'mem0_memories'),
-            "embedding_model_dims": 1536 if llm_provider == "openai" else 768
+            "embedding_model_dims": embedding_dims
         }
         
         # For cloud instances (URLs starting with https://), don't specify port
@@ -119,16 +128,71 @@ def get_mem0_client():
         if qdrant_api_key:
             config["vector_store"]["config"]["api_key"] = qdrant_api_key
     else:
+        # Determine embedding dimensions based on the actual embedding model
+        embedding_model = os.getenv('EMBEDDING_MODEL_CHOICE', '')
+        if 'embedding-001' in embedding_model:  # Google Gemini embedding model
+            embedding_dims = 768
+        elif llm_provider == "openai":
+            embedding_dims = 1536
+        else:
+            embedding_dims = 768  # Default for other providers
+            
         # Default to Supabase for backward compatibility
         config["vector_store"] = {
             "provider": "supabase",
             "config": {
                 "connection_string": os.environ.get('DATABASE_URL', ''),
                 "collection_name": "mem0_memories",
-                "embedding_model_dims": 1536 if llm_provider == "openai" else 768
+                "embedding_model_dims": embedding_dims
             }
         }
     
+    # Add standardized graph extraction schema to reduce entity type inconsistencies
+    standardized_graph_prompt = """
+Extract entities and relationships using ONLY these standardized types to ensure consistency:
+
+ENTITY TYPES (use exactly these labels):
+- person: Individual people (use full names when available)
+- organization: Companies, institutions, groups, teams
+- location: Cities, countries, addresses, places  
+- skill: Technical or professional abilities
+- role: Job titles or positions
+- technology: Programming languages, tools, frameworks
+- project: Work projects, initiatives, products
+- hobby: Personal interests and activities
+
+RELATIONSHIP TYPES (use exactly these):
+- works_at: person -> organization
+- lives_in: person -> location
+- has_skill: person -> skill  
+- has_role: person -> role
+- uses_technology: person -> technology
+- works_on: person -> project
+- enjoys: person -> hobby
+- collaborates_with: person -> person
+- married_to: person -> person
+- reports_to: person -> person
+- manages: person -> person
+- member_of: person -> organization
+
+STRICT RULES:
+1. Use ONLY the entity and relationship types listed above
+2. Convert names to lowercase with underscores (e.g., "John Smith" -> "john_smith")
+3. If unsure about type, use the closest standard type from the list
+4. Do NOT create new entity or relationship types
+5. Prefer "person" over "people", "individual", "user", etc.
+6. Prefer "organization" over "company", "business", "firm", etc.
+
+Example:
+Input: "Sarah Chen is a data scientist at Google who specializes in NLP and lives in Mountain View"
+Output: [
+  {"source": "sarah_chen", "source_type": "person", "relationship": "works_at", "target": "google", "target_type": "organization"},
+  {"source": "sarah_chen", "source_type": "person", "relationship": "has_role", "target": "data_scientist", "target_type": "role"},
+  {"source": "sarah_chen", "source_type": "person", "relationship": "has_skill", "target": "nlp", "target_type": "skill"},
+  {"source": "sarah_chen", "source_type": "person", "relationship": "lives_in", "target": "mountain_view", "target_type": "location"}
+]
+"""
+
     # Configure Neo4j graph store if credentials are provided
     neo4j_url = os.getenv('NEO4J_URL')
     neo4j_username = os.getenv('NEO4J_USERNAME')
@@ -142,6 +206,8 @@ def get_mem0_client():
                 "username": neo4j_username,
                 "password": neo4j_password
             }
+            # Temporarily removing custom_prompt to test basic functionality
+            # "custom_prompt": standardized_graph_prompt
         }
 
     # config["custom_fact_extraction_prompt"] = CUSTOM_INSTRUCTIONS
