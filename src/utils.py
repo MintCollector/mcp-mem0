@@ -86,15 +86,58 @@ def get_mem0_client():
         if embedding_base_url:
             config["embedder"]["config"]["ollama_base_url"] = embedding_base_url
     
-    # Configure Supabase vector store
-    config["vector_store"] = {
-        "provider": "supabase",
-        "config": {
-            "connection_string": os.environ.get('DATABASE_URL', ''),
-            "collection_name": "mem0_memories",
+    # Configure vector store based on provider
+    vector_store_provider = os.getenv('VECTOR_STORE_PROVIDER', 'supabase')
+    
+    if vector_store_provider == 'qdrant':
+        qdrant_host = os.getenv('QDRANT_HOST', 'localhost')
+        qdrant_config = {
+            "collection_name": os.getenv('QDRANT_COLLECTION', 'mem0_memories'),
             "embedding_model_dims": 1536 if llm_provider == "openai" else 768
         }
-    }
+        
+        # For cloud instances (URLs starting with https://), don't specify port
+        if qdrant_host.startswith('https://'):
+            qdrant_config["url"] = qdrant_host
+        else:
+            # For local instances, use host and port
+            qdrant_config["host"] = qdrant_host
+            qdrant_config["port"] = int(os.getenv('QDRANT_PORT', '6333'))
+        
+        config["vector_store"] = {
+            "provider": "qdrant",
+            "config": qdrant_config
+        }
+        
+        # Add API key if provided (for Qdrant Cloud)
+        qdrant_api_key = os.getenv('QDRANT_API_KEY')
+        if qdrant_api_key:
+            config["vector_store"]["config"]["api_key"] = qdrant_api_key
+    else:
+        # Default to Supabase for backward compatibility
+        config["vector_store"] = {
+            "provider": "supabase",
+            "config": {
+                "connection_string": os.environ.get('DATABASE_URL', ''),
+                "collection_name": "mem0_memories",
+                "embedding_model_dims": 1536 if llm_provider == "openai" else 768
+            }
+        }
+    
+    # Configure Neo4j graph store if credentials are provided
+    neo4j_url = os.getenv('NEO4J_URL')
+    neo4j_username = os.getenv('NEO4J_USERNAME')
+    neo4j_password = os.getenv('NEO4J_PASSWORD')
+    
+    if neo4j_url and neo4j_username and neo4j_password:
+        config["graph_store"] = {
+            "provider": "neo4j",
+            "config": {
+                "url": neo4j_url,
+                "username": neo4j_username,
+                "password": neo4j_password
+            }
+        }
 
     # config["custom_fact_extraction_prompt"] = CUSTOM_INSTRUCTIONS
     

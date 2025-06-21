@@ -25,9 +25,10 @@ The server provides three essential memory management tools:
 ## Prerequisites
 
 - Python 3.12+
-- Supabase or any PostgreSQL database (for vector storage of memories)
+- Vector store: Either Qdrant or Supabase/PostgreSQL (for vector storage of memories)
 - API keys for your chosen LLM provider (OpenAI, OpenRouter, or Ollama)
 - Docker if running the MCP server as a container (recommended)
+- (Optional) Neo4j database for graph-based memory storage
 
 ## Installation
 
@@ -58,6 +59,8 @@ The server provides three essential memory management tools:
 
 ### Using Docker (Recommended)
 
+> **Note**: The Docker configuration has not been updated for Neo4j graph store support. If you need Docker with Neo4j, you'll need to update the Dockerfile accordingly.
+
 1. Build the Docker image:
    ```bash
    docker build -t mcp/mem0 --build-arg PORT=8050 .
@@ -79,7 +82,45 @@ The following environment variables can be configured in your `.env` file:
 | `LLM_API_KEY` | API key for the LLM provider | `sk-...` |
 | `LLM_CHOICE` | LLM model to use | `gpt-4o-mini` |
 | `EMBEDDING_MODEL_CHOICE` | Embedding model to use | `text-embedding-3-small` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:port/db` |
+| `VECTOR_STORE_PROVIDER` | Vector store to use (qdrant or supabase) | `supabase` |
+| `QDRANT_HOST` | Qdrant host (if using Qdrant) | `localhost` |
+| `QDRANT_PORT` | Qdrant port (if using Qdrant) | `6333` |
+| `QDRANT_COLLECTION` | Qdrant collection name | `mem0_memories` |
+| `QDRANT_API_KEY` | Qdrant API key (for cloud) | `your-api-key` |
+| `DATABASE_URL` | PostgreSQL connection string (if using Supabase) | `postgresql://user:pass@host:port/db` |
+| `NEO4J_URL` | Neo4j connection URL (optional) | `bolt://localhost:7687` |
+| `NEO4J_USERNAME` | Neo4j username (optional) | `neo4j` |
+| `NEO4J_PASSWORD` | Neo4j password (optional) | `password` |
+
+### Vector Store Configuration
+
+This server supports two vector store options:
+
+#### Qdrant (Recommended for local development)
+- Set `VECTOR_STORE_PROVIDER=qdrant` in your `.env` file
+- Run Qdrant locally with Docker: `docker run -p 6333:6333 qdrant/qdrant`
+- Or use Qdrant Cloud with `QDRANT_API_KEY`
+
+#### Supabase/PostgreSQL
+- Leave `VECTOR_STORE_PROVIDER` empty or set to `supabase`
+- Configure `DATABASE_URL` with your PostgreSQL connection string
+- Works with Supabase or any PostgreSQL database with pgvector extension
+
+### Graph Store Support (Optional)
+
+This server now supports Neo4j as a graph store in addition to the vector store. When Neo4j credentials are provided, Mem0 will:
+
+- Store memories in both vector and graph databases simultaneously
+- Extract entities and relationships from conversations
+- Enable more sophisticated memory retrieval using graph traversal
+
+To enable graph store support:
+
+1. Set up a Neo4j instance (local or cloud-based like Neo4j AuraDB)
+2. Configure the Neo4j environment variables in your `.env` file
+3. The server will automatically detect and use Neo4j when credentials are provided
+
+Note: If Neo4j credentials are not provided, the server will function normally using only the vector store.
 
 ## Running the Server
 
@@ -164,7 +205,10 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
         "LLM_API_KEY": "YOUR-API-KEY",
         "LLM_CHOICE": "gpt-4o-mini",
         "EMBEDDING_MODEL_CHOICE": "text-embedding-3-small",
-        "DATABASE_URL": "YOUR-DATABASE-URL"
+        "DATABASE_URL": "YOUR-DATABASE-URL",
+        "NEO4J_URL": "bolt://localhost:7687",
+        "NEO4J_USERNAME": "neo4j",
+        "NEO4J_PASSWORD": "YOUR-NEO4J-PASSWORD"
       }
     }
   }
@@ -185,7 +229,10 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
                "-e", "LLM_API_KEY", 
                "-e", "LLM_CHOICE", 
                "-e", "EMBEDDING_MODEL_CHOICE", 
-               "-e", "DATABASE_URL", 
+               "-e", "DATABASE_URL",
+               "-e", "NEO4J_URL",
+               "-e", "NEO4J_USERNAME", 
+               "-e", "NEO4J_PASSWORD",
                "mcp/mem0"],
       "env": {
         "TRANSPORT": "stdio",
@@ -194,7 +241,10 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
         "LLM_API_KEY": "YOUR-API-KEY",
         "LLM_CHOICE": "gpt-4o-mini",
         "EMBEDDING_MODEL_CHOICE": "text-embedding-3-small",
-        "DATABASE_URL": "YOUR-DATABASE-URL"
+        "DATABASE_URL": "YOUR-DATABASE-URL",
+        "NEO4J_URL": "bolt://localhost:7687",
+        "NEO4J_USERNAME": "neo4j",
+        "NEO4J_PASSWORD": "YOUR-NEO4J-PASSWORD"
       }
     }
   }
