@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to verify Neo4j connection independently
+Test script to verify Mem0 integration with Neo4j and Qdrant
 """
 import os
 from dotenv import load_dotenv

@@ -10,13 +10,14 @@ from dotenv import load_dotenv
 try:
     from test_qdrant import test_qdrant_connection
     from test_neo4j import test_neo4j_connection
+    from test_llm import test_llm_setup
 except ImportError:
-    print("❌ Could not import test modules. Make sure test_qdrant.py and test_neo4j.py exist.")
+    print("❌ Could not import test modules. Make sure test_qdrant.py, test_neo4j.py, and test_llm.py exist.")
     sys.exit(1)
 
 def main():
-    """Run both connection tests"""
-    print("🧪 Database Connection Tests")
+    """Run all connection tests"""
+    print("🧪 System Component Tests")
     print("=" * 50)
     
     # Load environment variables
@@ -24,13 +25,18 @@ def main():
     
     results = {}
     
+    # Test LLM
+    print("\n1️⃣  LLM TEST")
+    print("-" * 20)
+    results['llm'] = test_llm_setup()
+    
     # Test Qdrant
-    print("\n1️⃣  QDRANT TEST")
+    print("\n\n2️⃣  QDRANT TEST")
     print("-" * 20)
     results['qdrant'] = test_qdrant_connection()
     
     # Test Neo4j
-    print("\n\n2️⃣  NEO4J TEST")
+    print("\n\n3️⃣  NEO4J TEST")
     print("-" * 20)
     results['neo4j'] = test_neo4j_connection()
     
