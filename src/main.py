@@ -12,7 +12,7 @@ from utils import get_mem0_client
 
 load_dotenv()
 
-# Default user ID for memory operations
+# Default user ID for memory operations - hardcoded for single user
 DEFAULT_USER_ID = "user"
 
 # Create a dataclass for our application context
@@ -64,10 +64,50 @@ async def save_memory(ctx: Context, text: str) -> str:
     try:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
         messages = [{"role": "user", "content": text}]
-        mem0_client.add(messages, user_id=DEFAULT_USER_ID)
+        result = mem0_client.add(messages, user_id=DEFAULT_USER_ID)
         return f"Successfully saved memory: {text[:100]}..." if len(text) > 100 else f"Successfully saved memory: {text}"
     except Exception as e:
         return f"Error saving memory: {str(e)}"
+
+@mcp.tool()
+async def save_conversation(ctx: Context, conversation: str) -> str:
+    """Save an entire conversation to memory with automatic fact extraction and relationship building.
+
+    This tool processes full conversations and extracts meaningful information automatically.
+    It handles the conversation format internally and builds both vector and graph memories.
+    
+    Use this instead of save_memory when you have full conversation context to process.
+
+    Args:
+        ctx: The MCP server provided context which includes the Mem0 client
+        conversation: The conversation text to process (can be multi-turn dialogue)
+    """
+    try:
+        mem0_client = ctx.request_context.lifespan_context.mem0_client
+        
+        # mem0 can handle raw conversation text and will extract facts automatically
+        result = mem0_client.add(conversation, user_id=DEFAULT_USER_ID)
+        
+        # Extract information about what was processed
+        if isinstance(result, dict) and "results" in result:
+            facts_count = len(result["results"])
+            relations_added = len(result.get("relations", {}).get("added_entities", []))
+            
+            return json.dumps({
+                "status": "success",
+                "facts_extracted": facts_count,
+                "relationships_created": relations_added,
+                "message": f"Processed conversation and extracted {facts_count} facts with {relations_added} relationships"
+            }, indent=2)
+        else:
+            return json.dumps({
+                "status": "success", 
+                "message": "Conversation processed successfully",
+                "result": str(result)
+            }, indent=2)
+            
+    except Exception as e:
+        return f"Error processing conversation: {str(e)}"
 
 @mcp.tool()
 async def get_all_memories(ctx: Context) -> str:
