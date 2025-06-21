@@ -78,17 +78,26 @@ async def get_all_memories(ctx: Context) -> str:
     Args:
         ctx: The MCP server provided context which includes the Mem0 client
 
-    Returns a JSON formatted list of all stored memories, including when they were created
-    and their content. Results are paginated with a default of 50 items per page.
+    Returns a JSON formatted list of all stored memories, including their IDs, content,
+    and creation timestamps. Memory IDs can be used with delete_memory and update_memory tools.
     """
     try:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
         memories = mem0_client.get_all(user_id=DEFAULT_USER_ID)
+        
         if isinstance(memories, dict) and "results" in memories:
-            flattened_memories = [memory["memory"] for memory in memories["results"]]
+            # Return full memory objects with IDs for delete/update operations
+            formatted_memories = []
+            for memory in memories["results"]:
+                formatted_memories.append({
+                    "id": memory.get("id"),
+                    "memory": memory.get("memory"),
+                    "created_at": memory.get("created_at"),
+                    "updated_at": memory.get("updated_at")
+                })
+            return json.dumps(formatted_memories, indent=2)
         else:
-            flattened_memories = memories
-        return json.dumps(flattened_memories, indent=2)
+            return json.dumps(memories, indent=2)
     except Exception as e:
         return f"Error retrieving memories: {str(e)}"
 
@@ -114,6 +123,105 @@ async def search_memories(ctx: Context, query: str, limit: int = 3) -> str:
         return json.dumps(flattened_memories, indent=2)
     except Exception as e:
         return f"Error searching memories: {str(e)}"
+
+@mcp.tool()
+async def delete_memory(ctx: Context, memory_id: str) -> str:
+    """Delete a specific memory by its ID.
+
+    Use this tool to remove memories that are no longer relevant or accurate.
+    You can get memory IDs from search results or get_all_memories.
+
+    Args:
+        ctx: The MCP server provided context which includes the Mem0 client
+        memory_id: The unique identifier of the memory to delete
+    """
+    try:
+        mem0_client = ctx.request_context.lifespan_context.mem0_client
+        result = mem0_client.delete(memory_id, user_id=DEFAULT_USER_ID)
+        return f"Successfully deleted memory with ID: {memory_id}"
+    except Exception as e:
+        return f"Error deleting memory {memory_id}: {str(e)}"
+
+@mcp.tool()
+async def update_memory(ctx: Context, memory_id: str, new_content: str) -> str:
+    """Update an existing memory with new content.
+
+    Use this tool to modify or correct existing memories while preserving their ID.
+    You can get memory IDs from search results or get_all_memories.
+
+    Args:
+        ctx: The MCP server provided context which includes the Mem0 client
+        memory_id: The unique identifier of the memory to update
+        new_content: The new content to replace the existing memory
+    """
+    try:
+        mem0_client = ctx.request_context.lifespan_context.mem0_client
+        result = mem0_client.update(memory_id, new_content, user_id=DEFAULT_USER_ID)
+        return f"Successfully updated memory {memory_id} with: {new_content[:100]}..." if len(new_content) > 100 else f"Successfully updated memory {memory_id} with: {new_content}"
+    except Exception as e:
+        return f"Error updating memory {memory_id}: {str(e)}"
+
+@mcp.tool()
+async def find_relationships(ctx: Context, entity: str) -> str:
+    """Find all relationships and connections for a specific entity (person, organization, etc.).
+
+    This tool leverages the graph database to discover how entities are connected.
+    Use this to understand relationships like who works with whom, what projects people are involved in, etc.
+
+    Args:
+        ctx: The MCP server provided context which includes the Mem0 client
+        entity: The name of the person, organization, or concept to find relationships for
+    """
+    try:
+        mem0_client = ctx.request_context.lifespan_context.mem0_client
+        
+        # Search for memories containing the entity
+        search_results = mem0_client.search(entity, user_id=DEFAULT_USER_ID, limit=10)
+        
+        relationships = []
+        if isinstance(search_results, dict) and "relations" in search_results:
+            # Extract relationships from search results
+            relations = search_results.get("relations", [])
+            entity_lower = entity.lower().replace(" ", "_")
+            
+            for relation in relations:
+                source = relation.get("source", "")
+                relationship = relation.get("relationship", relation.get("relation", ""))
+                target = relation.get("destination", relation.get("target", ""))
+                
+                # Check if the entity is involved in this relationship
+                if entity_lower in source.lower() or entity_lower in target.lower():
+                    relationships.append({
+                        "source": source,
+                        "relationship": relationship,
+                        "target": target
+                    })
+        
+        if relationships:
+            return json.dumps({
+                "entity": entity,
+                "relationships": relationships,
+                "count": len(relationships)
+            }, indent=2)
+        else:
+            # Fallback: search for mentions in memory content
+            memories = search_results.get("results", []) if isinstance(search_results, dict) else search_results
+            related_memories = []
+            
+            for memory in memories:
+                if isinstance(memory, dict) and "memory" in memory:
+                    memory_text = memory["memory"]
+                    if entity.lower() in memory_text.lower():
+                        related_memories.append(memory_text)
+            
+            return json.dumps({
+                "entity": entity,
+                "related_memories": related_memories,
+                "note": "No structured relationships found, showing related memories instead"
+            }, indent=2)
+            
+    except Exception as e:
+        return f"Error finding relationships for {entity}: {str(e)}"
 
 async def main():
     transport = os.getenv("TRANSPORT", "sse")
