@@ -39,6 +39,11 @@ def get_mem0_client():
         if llm_api_key and not os.environ.get("OPENAI_API_KEY"):
             os.environ["OPENAI_API_KEY"] = llm_api_key
             
+        # Set custom base URL for OpenAI-compatible endpoints (like Google Gemini)
+        llm_base_url = os.getenv('LLM_BASE_URL')
+        if llm_base_url and not os.environ.get("OPENAI_BASE_URL"):
+            os.environ["OPENAI_BASE_URL"] = llm_base_url
+            
         # For OpenRouter, set the specific API key
         if llm_provider == 'openrouter' and llm_api_key:
             os.environ["OPENROUTER_API_KEY"] = llm_api_key
